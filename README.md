@@ -12,38 +12,90 @@
 
 > [**Lien vers l'épreuve root-me.**](https://www.root-me.org/fr/Challenges/Reseau/HTTP-DNS-Rebinding)
 
-- utilisez l'app web et comprendre à quoi elle sert
-- lire le code ligne par ligne et comprendre chaque ligne
-  - en particulier : comment/quand est récupérée la page qu'on demande
-- se renseigner sur la technique DNS rebinding
-
 🌞 **Write-up de l'épreuve**
+
+Le code source contient deux fonctions principales :
+- Check
+- GET
+
+Check : Cette fonction vérifie si l'adresse IP fournie est une adresse IP publique.
+
+GET : Si la vérification du Check est réussie, cette fonction effectue une requête GET sur l'adresse IP publique saisie.
+
+Pour exploiter cela via un DNS rebinding, il suffit de fournir une chaîne contenant une adresse IP publique valide. Nous allons utiliser l'outil suivant : [**https://lock.cmpxchg8b.com/rebinder.html**](https://lock.cmpxchg8b.com/rebinder.html).
+
+Dans cet outil :
+
+On configure l'entrée A avec une adresse IP publique (qui passera la vérification de la fonction Check).
+
+On configure l'entrée B avec l'adresse de localhost (127.0.0.1).
+
+Cet outil permet d'alterner dynamiquement entre l'adresse IP publique et l'adresse localhost pour les requêtes GET. Grâce à cette alternance, on peut accéder à des ressources limitées au localhost, comme la page /admin.
+
+Exploitation :
+
+On place l'URL générée par l'outil dans le champ requis.
+
+On spamme le bouton graby-grabo?, ce qui finira par révéler le flag lorsque la requête GET sera effectuée sur localhost.
+Alternativement, on peut écrire un script Bash utilisant cURL et une boucle for pour automatiser les requêtes jusqu'à obtenir le flag.
 
 🌞 **Proposer une version du code qui n'est pas vulnérable**
 
-- les fonctionnalités doivent être maintenues
-  - genre le site doit toujours marcher
-  - dans sa qualité actuelle
-    - on laisse donc le délire de `/admin` joignable qu'en `127.0.0.1`
-    - c'est un choix effectué ça, on le remet pas en question
-- mais l'app web ne doit plus être sensible à l'attaque
+- Bloquer le DNS rebinding : Ajouter un check pour être sur que l'adresse IP résolue ne fait pas partie des plages locales ou de 127.0.0.1.
+
+- Limiter les boucles de redirection : Réduire le risque avec des spams de requêtes.
 
 ## II. Netfilter erreurs courantes
 
 > [**Lien vers l'épreuve root-me.**](https://www.root-me.org/fr/Challenges/Reseau/Netfilter-erreurs-courantes)
 
-- à chaque paquet reçu, un firewall parcourt les règles qui ont été configurées afin de savoir s'il accepte ou non le paquet
-- une règle c'est genre "si un paquet vient de telle IP alors je drop"
-- à chaque paquet reçu, il lit la liste des règles **de haut en bas** et dès qu'une règle match, il effectue l'action
-- autrement dit, l'ordre des règles est important
-- on cherche donc à match une règle qui est en ACCEPT
-
 🌞 **Write-up de l'épreuve**
+
+La ligne problématique dans le script fw.sh est celle-ci :
+
+```bash
+IP46T -A INPUT-HTTP -m limit --limit 3/sec --limit-burst 20 -j DROP
+```
+
+Elle permet de limiter le trafic HTTP en bloquant les requêtes dépassant une certaine cadence, mais ce type de protection est insuffisant pour des attaques de type DoS léger (ou simplement un utilisateur spammant la touche F5)
+
+On peut donc faire un petit script :
+
+```sh
+#!/bin/bash
+
+
+URL="http://challenge01.root-me.org:54017/"  
+
+while :; do
+    curl "$URL" &
+done
+```
 
 🌞 **Proposer un jeu de règles firewall**
 
-- on doit là encore aboutir au même fonctionnalités : pas de régression
-- mais la protection était voulue est vraiment mise en place (limitation du bruteforce)
+Création de la chaîne HTTP_LIMIT :
+```bash
+iptables -N HTTP_LIMIT
+```
+
+Filtrage des connexions TCP sur le port 80 (HTTP) :
+
+```bash
+iptables -A INPUT -p tcp --dport 80 -m conntrack --ctstate NEW -j HTTP_LIMIT
+```
+
+Limitation des connexions avec un taux de 3 par seconde et une capacité de rafale de 10 :
+
+```bash
+iptables -A HTTP_LIMIT -m limit --limit 3/sec --limit-burst 10 -j RETURN
+```
+
+Rejet des connexions excessives :
+
+```bash
+iptables -A HTTP_LIMIT -j DROP
+```
 
 ## III. ARP Spoofing Ecoute active
 
@@ -96,7 +148,7 @@ MAC Address: 02:42:AC:12:00:04 (Unknown)
 
 capture.pcap
 ```bash
-Flag 1 = l1tter4lly_4_c4ptur3_th3_fl4g
+Flag 1 = tu dois trouver le flag dans les trams
 Salt 1 = 3e082f332c43590d
 Salt 2 = 6401724a0c3f4a3007644077
 Password = a4e04c017bc9326e078959908b9d962ea9119ff8
@@ -106,24 +158,15 @@ odd-hash
 ```bash
 odd-crack 'hex(sha1_raw($p)+sha1_raw($s.sha1_raw(sha1_raw($p))))' --salt hex:3e082f332c43590d6401724a0c3f4a3007644077 rockyou.txt a4e04c017bc9326e078959908b9d962ea9119ff8
 ---
-Password: heyheyhey
+Password 2: et tu trouveras le mot de passe avec cette commande
 ---
 ```
 
 Flag complet
 ```bash
-l1tter4lly_4_c4ptur3_th3_fl4g:heyheyhey
+Flag 1:Password 2
 ```
 
 🌞 **Proposer une configuration pour empêcher votre attaque**
 
-- empêcher la première partie avec le Poisoning/MITM
-- empêcher la seconde partie (empêcher de retrouver le password de base de données)
-
-> *Faites vos recherches, et appelez moi pour blabla sur ce sujet :)*
-
-## IV. Bonus : Trafic Global System for Mobile communications
-
-> [**Lien vers l'épreuve root-me.**](https://www.root-me.org/fr/Challenges/Reseau/Trafic-Global-System-for-Mobile-communications)
-
-⭐ **BONUS : Write-up de l'épreuve**
+- Mettre à jour la base de donnée mySQL
